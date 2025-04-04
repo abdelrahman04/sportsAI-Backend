@@ -1,44 +1,13 @@
-# Football Player Analysis API
+# SportsAI - Football Player Analysis API
 
-This API provides functionality to analyze football players based on their positions, teams, and specific role attributes. It uses machine learning to find similar players and provide detailed statistical analysis.
+A FastAPI-based backend service for analyzing football players based on their positions, teams, and specific role attributes.
 
-## Setup
+## Features
 
-1. Install the required dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Make sure you have the required data files in the root directory:
-- `Players Merged.csv`
-- `Squad Merged.csv`
-
-3. Run the API:
-```bash
-python api.py
-```
-
-The API will be available at `http://localhost:8000`
-
-## API Documentation
-
-### Endpoints
-
-#### POST /analyze-players
-
-Analyzes players based on position, team, and specific role attributes.
-
-**Request Body:**
-```json
-{
-    "position": "string",
-    "team": "string",
-    "specific_role_cols": ["string"]
-}
-```
-
-**Parameters:**
-- `position`: One of the following positions:
+- Player analysis based on position and team
+- Customizable role-specific attributes for analysis
+- Similar player recommendations
+- Support for different player positions including:
   - Forward
   - Winger
   - Attacking Mid
@@ -47,101 +16,37 @@ Analyzes players based on position, team, and specific role attributes.
   - Centre Defense
   - Goalkeeping
 
-- `team`: One of the following teams:
-  - Arsenal
-  - Aston Villa
-  - Bournemouth
-  - Brentford
-  - Brighton
-  - Burnley
-  - Chelsea
-  - Crystal Palace
-  - Everton
-  - Fulham
-  - Liverpool
-  - Luton Town
-  - Manchester City
-  - Manchester United
-  - Newcastle United
-  - Nottingham Forest
-  - Sheffield United
-  - Tottenham Hotspur
-  - West Ham United
-  - Wolverhampton Wanderers
+## API Endpoints
 
-- `specific_role_cols`: List of specific attributes to focus on. Must be valid attribute codes from the following list:
-  - Gls (Goals)
-  - SoT (Shots on Target)
-  - SoT/90 (Shots On Target Per 90)
-  - G/SoT (Goals/Shots on target)
-  - PK (Penalty Kicks Made)
-  - xG (Expected Goals)
-  - SCA (Shot-creating actions)
-  - FK (Shots from Freekick)
-  - Ast (Assists)
-  - xA (Expected Assists)
-  - KP (Key Passes)
-  - CrsPA (Crosses into Penalty Area)
-  - PrgP (Progressive Passes)
-  - Cmp% (Completed Passes Total)
-  - PPA (Passes into Penalty Area)
-  - Succ% (Successful Take-On%)
-  - Carries
-  - TklW (Tackles Won)
-  - Tkl% (% of Dribblers Tackled)
-  - Blocks
-  - Pass (Passes Block)
-  - Int (Interceptions)
-  - Clr (Clearances)
-  - Recov (Ball Recoveries)
-  - Won% (% of Aerial Duels Won)
-  - GA90 (Goals Against /90)
-  - Save% (Save Percentage)
-  - CS% (Clean Sheet Percentage)
-  - Save%2 (Penalty Kicks Saved %)
-  - Stp% (Crosses Stopped)
-  - Launch% (% of Passes that were Launched)
+### POST /analyze-players
 
-**Response:**
+Analyzes players based on position, team, and specific role attributes.
+
+Request body:
 ```json
 {
     "position": "string",
     "team": "string",
-    "specific_role_cols": ["string"],
-    "team_players": ["string"],
-    "similar_players": [
-        {
-            "player": "string",
-            "position": "string",
-            "team": "string",
-            "distance": float,
-            "stats": {
-                "attribute": float
-            }
-        }
-    ]
+    "specific_role_cols": ["string"]
 }
 ```
 
-**Example Request:**
-```json
-{
-    "position": "Forward",
-    "team": "Liverpool",
-    "specific_role_cols": ["Gls", "SoT"]
-}
+## Setup
+
+1. Install dependencies:
+```bash
+pip install -r requirements.txt
 ```
 
-## Error Handling
+2. Run the server:
+```bash
+python api.py
+```
 
-The API returns appropriate HTTP status codes:
-- 200: Successful request
-- 400: Invalid input parameters
-- 404: Team not found
-- 500: Internal server error
+The server will start on http://localhost:8000
 
-## Interactive Documentation
+## Data
 
-FastAPI provides automatic interactive documentation. You can access it at:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc` 
+The analysis uses two main data sources:
+- Players Merged.csv: Contains data for outfield players
+- Players GK Merged.csv: Contains data for goalkeepers

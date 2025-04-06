@@ -31,10 +31,33 @@ class PlayerAnalysisRequest(BaseModel):
 
 # Load data and define mappings (moved from main.py)
 teams = [
-    "Arsenal", "Aston Villa", "Bournemouth", "Brentford", "Brighton", "Burnley", "Chelsea",
-    "Crystal Palace", "Everton", "Fulham", "Liverpool", "Luton Town", "Manchester City", 
-    "Manchester United", "Newcastle United", "Nottingham Forest", "Sheffield United", "Tottenham Hotspur",
-    "West Ham United", "Wolverhampton Wanderers"
+    # Premier League
+    "Arsenal", "Aston Villa", "Bournemouth", "Brentford", "Brighton", "Burnley",
+    "Chelsea", "Crystal Palace", "Everton", "Fulham", "Liverpool", "Luton Town",
+    "Manchester City", "Manchester Utd", "Newcastle Utd", "Nott'ham Forest",
+    "Sheffield Utd", "Tottenham", "West Ham", "Wolves",
+    
+    # La Liga
+    "Alavés", "Almería", "Athletic Club", "Atlético Madrid", "Barcelona", "Betis",
+    "Cádiz", "Celta Vigo", "Getafe", "Girona", "Granada", "Las Palmas",
+    "Mallorca", "Osasuna", "Rayo Vallecano", "Real Madrid", "Real Sociedad",
+    "Sevilla", "Valencia", "Villarreal",
+    
+    # Bundesliga
+    "Augsburg", "Bayern Munich", "Bochum", "Darmstadt 98", "Dortmund",
+    "Eint Frankfurt", "Freiburg", "Gladbach", "Heidenheim", "Hoffenheim",
+    "Köln", "Leverkusen", "Mainz 05", "RB Leipzig", "Stuttgart", "Union Berlin",
+    "Werder Bremen", "Wolfsburg",
+    
+    # Serie A
+    "Atalanta", "Bologna", "Cagliari", "Empoli", "Fiorentina", "Frosinone",
+    "Genoa", "Hellas Verona", "Inter", "Juventus", "Lazio", "Lecce", "Milan",
+    "Monza", "Napoli", "Roma", "Salernitana", "Sassuolo", "Torino", "Udinese",
+    
+    # Ligue 1
+    "Brest", "Clermont Foot", "Le Havre", "Lens", "Lille", "Lorient", "Lyon",
+    "Marseille", "Metz", "Monaco", "Montpellier", "Nantes", "Nice", "Paris S-G",
+    "Reims", "Rennes", "Strasbourg", "Toulouse"
 ]
 
 attribute_map = {
@@ -86,8 +109,8 @@ df_position_roles = {
     "Forward": ["CF", "SS", "FW"],
     "Winger": ["LW", "RW"],
     "Attacking Mid": ["AM"],
-    "Mid": ["CM", "DM", "LM", "RM"],
-    "Defense": ["CB", "DF"],
+    "Centre Mid": ["CM", "DM", "LM", "RM"],
+    "Centre Defense": ["CB", "DF"],
     "Fullback": ["LB", "RB"],
     "Goalkeeping": ["GK"]
 }

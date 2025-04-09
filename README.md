@@ -50,3 +50,26 @@ The server will start on http://localhost:8000
 The analysis uses two main data sources:
 - Players Merged.csv: Contains data for outfield players
 - Players GK Merged.csv: Contains data for goalkeepers
+
+## Data Processing Steps
+
+The data used in this analysis goes through several processing steps:
+
+1. **Data Collection**:
+   - Extracting data from FBref using Excel exports
+   - Web scraping to obtain exact player positions from Transfermarkt
+
+2. **Data Cleaning**:
+   - Handling data types and converting to appropriate formats
+   - Processing irregular rows (Rk column)
+   - Standardizing league and team columns
+   - Cleaning players with unknown, missing, or incorrect positions
+
+3. **Dataset Integration**:
+   - Combining multiple datasets to create two major player datasets:
+     - Players Merged.csv: For outfield players
+     - Players GK Merged.csv: For goalkeepers
+   - Cleaning team dataset data types
+   - Integrating team datasets to create two major team datasets:
+     - Teams dataset
+     - Teams GK dataset

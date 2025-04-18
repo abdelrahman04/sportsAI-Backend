@@ -379,6 +379,7 @@ async def analyze_players(request: PlayerAnalysisRequest):
                     "player": row['Player'],
                     "position": row['Pos'],
                     "team": row['Squad'],
+                    "age": int(row['Age']),
                     "distance": float(distance),
                     "stats": {stat: float(row[attribute_map[stat]]) for stat in roles[request.position] if stat in attribute_map and attribute_map[stat] in row},
                     "method": method_name

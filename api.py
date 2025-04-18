@@ -305,7 +305,7 @@ async def analyze_players(request: PlayerAnalysisRequest):
 
         # Create weights
         print("\n=== Creating Weights ===")
-        weights = {col: request.specific_role_weight if col in request.specific_role_cols else 1.0 if col in filtered_cols else 0.0 for col in numeric_cols}
+        weights = {col: 1.0 if col in filtered_cols else 0.0 for col in numeric_cols}
         weight_vector = np.ones(X.shape[1])
         for col, weight in weights.items():
             if col in numeric_cols:
@@ -366,6 +366,15 @@ async def analyze_players(request: PlayerAnalysisRequest):
         relevant_indices = [list(numeric_cols).index(col) for col in relevant_cols]
         relevant_weights = weight_vector[relevant_indices]
         average_profile = team_data[team_data["MP"] > 20][relevant_cols].mean()
+        
+        # Create a copy of the average profile for weighted calculations
+        weighted_profile = average_profile.copy()
+        
+        # Apply specific_role_weight to the specified columns in the weighted profile
+        for col in request.specific_role_cols:
+            if col in weighted_profile:
+                weighted_profile[col] = weighted_profile[col] * request.specific_role_weight / 1.5
+                print(f"Applied weight {request.specific_role_weight} to {col}")
 
         # Convert abbreviated attribute names to full forms
         reverse_attribute_map = {v: k for k, v in attribute_map.items()}
@@ -391,7 +400,8 @@ async def analyze_players(request: PlayerAnalysisRequest):
                 if row['Squad'] == request.team:
                     continue
                 player_profile = row[relevant_cols]
-                distance = weighted_euclidean_distance(player_profile.values, average_profile.values, relevant_weights)
+                # Use weighted_profile for distance calculation
+                distance = weighted_euclidean_distance(player_profile.values, weighted_profile.values, relevant_weights)
                 player_distances.append({
                     "player": row['Player'],
                     "position": row['Pos'],

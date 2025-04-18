@@ -386,22 +386,52 @@ async def analyze_players(request: PlayerAnalysisRequest):
 
         # Find similar players using all methods
         def get_top_players(clusters, method_name):
-            player_distances = []
+            player_scores = []
             for idx, row in df_filtered.iterrows():
                 if row['Squad'] == request.team:
                     continue
+                
                 player_profile = row[relevant_cols]
-                distance = weighted_euclidean_distance(player_profile.values, average_profile.values, relevant_weights)
-                player_distances.append({
+                
+                # Calculate a score that prioritizes higher values for weighted attributes
+                score = 0
+                for i, col in enumerate(relevant_cols):
+                    # For weighted attributes, higher values are better
+                    if col in request.specific_role_cols:
+                        # Normalize the value to a 0-1 range based on the dataset
+                        max_val = df_filtered[col].max()
+                        min_val = df_filtered[col].min()
+                        if max_val > min_val:
+                            normalized_val = (player_profile[col] - min_val) / (max_val - min_val)
+                        else:
+                            normalized_val = 0.5  # Default if all values are the same
+                        
+                        # Add to score with weight
+                        score += normalized_val * request.specific_role_weight
+                    else:
+                        # For non-weighted attributes, we still want to match the team's profile
+                        # but with less importance
+                        team_avg = average_profile[col]
+                        max_val = df_filtered[col].max()
+                        min_val = df_filtered[col].min()
+                        if max_val > min_val:
+                            normalized_team_avg = (team_avg - min_val) / (max_val - min_val)
+                            normalized_player_val = (player_profile[col] - min_val) / (max_val - min_val)
+                            # Penalize deviation from team average (but with less weight)
+                            score -= abs(normalized_player_val - normalized_team_avg)
+                
+                player_scores.append({
                     "player": row['Player'],
                     "position": row['Pos'],
                     "team": row['Squad'],
                     "age": int(row['Age']),
-                    "distance": float(distance),
+                    "score": float(score),
                     "stats": {stat: float(row[attribute_map[stat]]) for stat in roles[request.position] if stat in attribute_map and attribute_map[stat] in row},
                     "method": method_name
                 })
-            return sorted(player_distances, key=lambda x: x['distance'])[:5]
+            
+            # Sort by score (higher is better)
+            return sorted(player_scores, key=lambda x: x['score'], reverse=True)[:5]
 
         # Get top players from all methods
         dbscan_players = get_top_players(dbscan_clusters, "DBSCAN")

@@ -30,6 +30,7 @@ class PlayerAnalysisRequest(BaseModel):
     position: str
     team: str
     specific_role_cols: List[str]
+    specific_role_weight: Optional[float] = 5.0  # Default to 5.0 if not provided
 
 # Load data and define mappings (moved from main.py)
 teams = [
@@ -304,7 +305,7 @@ async def analyze_players(request: PlayerAnalysisRequest):
 
         # Create weights
         print("\n=== Creating Weights ===")
-        weights = {col: 2.0 if col in request.specific_role_cols else 1.0 if col in filtered_cols else 0.0 for col in numeric_cols}
+        weights = {col: request.specific_role_weight if col in request.specific_role_cols else 1.0 if col in filtered_cols else 0.0 for col in numeric_cols}
         weight_vector = np.ones(X.shape[1])
         for col, weight in weights.items():
             if col in numeric_cols:

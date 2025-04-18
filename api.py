@@ -350,7 +350,17 @@ async def analyze_players(request: PlayerAnalysisRequest):
 
         # Calculate average profile
         print("\n=== Calculating Average Profile ===")
-        relevant_cols = [attribute_map[attr] for attr in roles[request.position]]
+        relevant_cols = []
+        for attr in roles[request.position]:
+            if attr in attribute_map:
+                # Special handling for Cmp% based on position
+                if attr == "Completed Passes Total" and request.position != "Goalkeeping":
+                    relevant_cols.append("Cmp%")
+                elif attr == "Passes Completed (Launched)" and request.position == "Goalkeeping":
+                    relevant_cols.append("Cmp%")
+                else:
+                    relevant_cols.append(attribute_map[attr])
+        
         relevant_cols = [col for col in relevant_cols if col in numeric_cols]
         relevant_indices = [list(numeric_cols).index(col) for col in relevant_cols]
         relevant_weights = weight_vector[relevant_indices]
@@ -361,7 +371,13 @@ async def analyze_players(request: PlayerAnalysisRequest):
         full_form_profile = {}
         for abbrev, value in average_profile.items():
             if abbrev in reverse_attribute_map:
-                full_form_profile[reverse_attribute_map[abbrev]] = float(value)
+                if abbrev == "Cmp%":
+                    if request.position == "Goalkeeping":
+                        full_form_profile["Passes Completed (Launched)"] = float(value)
+                    else:
+                        full_form_profile["Completed Passes Total"] = float(value)
+                else:
+                    full_form_profile[reverse_attribute_map[abbrev]] = float(value)
             else:
                 full_form_profile[abbrev] = float(value)
 

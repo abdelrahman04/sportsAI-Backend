@@ -105,7 +105,7 @@ roles = {
     "Centre Mid": ["Crosses into Penalty Area", "Progressive Passes", "Completed Passes Total", "Assists", "xA (Expected Assists)", "Successful Take-On%", "Carries", "Tackles Won", "% of Dribblers Tackled", "Blocks", "Passes Block", "Interceptions", "Clearances"],
     "Fullback": ["Tackles Won", "% of Dribblers Tackled", "Blocks", "Passes Block", "Interceptions", "Clearances", "Successful Take-On%", "Crosses into Penalty Area", "Progressive Passes", "Completed Passes Total", "Assists", "xA (Expected Assists)", "Carries", "Passes into Penalty Area", "Key Passes"],
     "Centre Defense": ["Tackles Won", "% of Dribblers Tackled", "Blocks", "Passes Block", "Interceptions", "Clearances", "Carries", "Successful Take-On%", "Ball Recoveries", "% of Aerial Duels Won"],
-    "Goalkeeping": ["Goals Against /90", "Save Percentage", "Clean Sheet Percentage", "Penalty Kicks Saved %", "Passes Completed (Launched)", "Crosses Stopped", "% of Passes that were Launched", "Assists", "xA (Expected Assists)"]
+    "Goalkeeping": ["Goals Against /90", "Save Percentage", "Clean Sheet Percentage", "Penalty Kicks Saved %", "Passes Completed (Launched)", "Crosses Stopped", "% of Passes that were Launched"]
 }
 
 df_position_roles = {
@@ -305,7 +305,13 @@ async def analyze_players(request: PlayerAnalysisRequest):
 
         # Create weights
         print("\n=== Creating Weights ===")
-        weights = {col: 1.0 if col in filtered_cols else 0.0 for col in numeric_cols}
+        if request.position == "Goalkeeping":
+            # For goalkeepers, set weight to 1.0 for filtered attributes and 0.5 for others
+            weights = {col: 1.0 if col in filtered_cols else 0.5 for col in numeric_cols}
+        else:
+            # For other positions, set weight to 1.0 for position-specific attributes
+            weights = {col: 1.0 if col in filtered_cols else 0.0 for col in numeric_cols}
+            
         weight_vector = np.ones(X.shape[1])
         for col, weight in weights.items():
             if col in numeric_cols:
@@ -397,8 +403,14 @@ async def analyze_players(request: PlayerAnalysisRequest):
         def get_top_players(clusters, method_name):
             player_distances = []
             for idx, row in df_filtered.iterrows():
+                # Skip players from the same team
                 if row['Squad'] == request.team:
                     continue
+                    
+                # For goalkeepers, only consider those with sufficient playing time
+                if request.position == "Goalkeeping" and row["90s"] < 10:
+                    continue
+                    
                 player_profile = row[relevant_cols]
                 # Use weighted_profile for distance calculation
                 distance = weighted_euclidean_distance(player_profile.values, weighted_profile.values, relevant_weights)

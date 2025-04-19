@@ -640,7 +640,7 @@ async def analyze_player_to_player(request: PlayerToPlayerRequest):
 
         # Get top N similar players
         print("\n=== Getting Top Players ===")
-        top_players = sorted(distances, key=lambda x: x['distance'])[:5]  # Always return top 5
+        top_players = sorted(distances, key=lambda x: x['distance'])[:10]  # Always return top 5
         print(f"Selected top {len(top_players)} similar players")
 
         # Get team data for average profile
@@ -659,6 +659,7 @@ async def analyze_player_to_player(request: PlayerToPlayerRequest):
         
         # Calculate team average
         team_average = team_data_filtered.mean()
+        print(team_average)
         print("Team average calculated")
         print(f"Team average shape: {team_average.shape}")
 
@@ -698,7 +699,7 @@ async def analyze_player_to_player(request: PlayerToPlayerRequest):
         average_profile = {}
         for col in relevant_cols:
             # Average between target player and weighted team profile
-            avg_value = (target_player_stats[col] + weighted_team_profile[col]) / 2
+            avg_value = target_player_stats[col] 
             # Convert to full form attribute name
             if col in reverse_attribute_map:
                 if col == "Cmp%":
@@ -746,7 +747,8 @@ async def analyze_player_to_player(request: PlayerToPlayerRequest):
             "original_position": player_pos,
             "team_average": full_form_profile,
             "average_profile": average_profile,
-            "similar_players": final_players
+            "similar_players": final_players,
+            "team_players": team_data[team_data["MP"] > 20]['Player'].tolist()
         }
 
     except Exception as e:

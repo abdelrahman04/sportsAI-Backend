@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional
@@ -31,6 +31,20 @@ class PlayerAnalysisRequest(BaseModel):
     team: str
     specific_role_cols: List[str]
     specific_role_weight: Optional[float] = 5.0  # Default to 5.0 if not provided
+
+class PlayerToPlayerRequest(BaseModel):
+    player_name: str
+    team: str
+    specific_role_cols: Optional[List[str]] = None
+    specific_role_weight: Optional[float] = 5.0
+
+class PlayerSearchRequest(BaseModel):
+    position: Optional[str] = None
+    team: Optional[str] = None
+    min_age: Optional[int] = None
+    max_age: Optional[int] = None
+    min_minutes: Optional[int] = None
+    search_term: Optional[str] = None
 
 # Load data and define mappings (moved from main.py)
 teams = [
@@ -471,6 +485,313 @@ async def analyze_players(request: PlayerAnalysisRequest):
             "wkmeans_players": wkmeans_players,
             "som_players": som_players,
             "average_profile": full_form_profile
+        }
+
+    except Exception as e:
+        print("\n=== ERROR OCCURRED ===")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        print("Stack trace:")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+def get_position_category(pos):
+    for category, positions in df_position_roles.items():
+        if pos in positions:
+            return category
+    return None
+
+@app.post("/analyze-player-to-player")
+async def analyze_player_to_player(request: PlayerToPlayerRequest):
+    try:
+        print("\n=== Starting Player-to-Player Analysis ===")
+        print(f"Request received - Player: {request.player_name}, Team: {request.team}")
+        print(f"Specific role columns: {request.specific_role_cols}")
+        print(f"Specific role weight: {request.specific_role_weight}")
+
+        # Validate team
+        if request.team not in teams:
+            print(f"Error: Invalid team {request.team}")
+            raise HTTPException(status_code=400, detail=f"Invalid team. Must be one of: {teams}")
+
+        # Load appropriate dataset
+        print("\n=== Loading Data ===")
+        print("Loading outfield players data...")
+        df_outfield = pd.read_csv('Players Merged.csv')
+        print(f"Outfield players loaded. Shape: {df_outfield.shape}")
+        
+        print("Loading goalkeeper data...")
+        df_gk = pd.read_csv('Players GK Merged.csv')
+        print(f"Goalkeeper data loaded. Shape: {df_gk.shape}")
+        
+        # Combine datasets
+        print("Combining datasets...")
+        df = pd.concat([df_outfield, df_gk], ignore_index=True)
+        print(f"Combined dataset shape: {df.shape}")
+        print(f"Columns in combined dataset: {df.columns.tolist()}")
+
+        # Find the target player
+        print("\n=== Finding Target Player ===")
+        print(f"Searching for player: {request.player_name}")
+        target_player = df[df['Player'] == request.player_name]
+        print(f"Found {len(target_player)} matching players")
+        
+        if len(target_player) == 0:
+            print(f"Error: Player {request.player_name} not found in dataset")
+            raise HTTPException(status_code=404, detail=f"Player {request.player_name} not found")
+        
+        # Get player's position and map to category
+        print("\n=== Determining Player Position ===")
+        player_pos = target_player['Pos'].iloc[0]
+        print(f"Player's position: {player_pos}")
+        position = get_position_category(player_pos)
+        print(f"Mapped position category: {position}")
+        
+        if position is None:
+            print(f"Error: Could not map position {player_pos} to a category")
+            raise HTTPException(status_code=400, detail=f"Could not determine position category for position: {player_pos}")
+
+        # Filter positions
+        print("\n=== Filtering Positions ===")
+        filtered_positions = df_position_roles[position]
+        print(f"Filtering for positions: {filtered_positions}")
+        df_filtered = df[df['Pos'].isin(filtered_positions)]
+        print(f"After position filtering. Shape: {df_filtered.shape}")
+
+        # Select numeric columns
+        print("\n=== Processing Numeric Columns ===")
+        numeric_cols = df_filtered.select_dtypes(include=['int64', 'float64']).columns
+        print(f"Found {len(numeric_cols)} numeric columns")
+        print(f"Numeric columns: {numeric_cols.tolist()}")
+        X = df_filtered[numeric_cols].fillna(0)
+        print("Missing values filled with 0")
+
+        # Scale the data
+        print("\n=== Scaling Data ===")
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+        print("Data scaled successfully")
+
+        # Get role stats and create weights
+        print("\n=== Creating Weights ===")
+        role_stats = roles[position]
+        print(f"Role stats for {position}: {role_stats}")
+        
+        # Calculate relevant columns from role stats
+        relevant_cols = []
+        for attr in role_stats:
+            if attr in attribute_map:
+                if attr == "Completed Passes Total" and position != "Goalkeeping":
+                    relevant_cols.append("Cmp%")
+                elif attr == "Passes Completed (Launched)" and position == "Goalkeeping":
+                    relevant_cols.append("Cmp%")
+                else:
+                    relevant_cols.append(attribute_map[attr])
+        
+        # Ensure we only use columns that exist in the numeric columns
+        relevant_cols = [col for col in relevant_cols if col in numeric_cols]
+        print(f"Relevant columns: {relevant_cols}")
+        
+        # Create weights only for relevant columns
+        weights = {col: request.specific_role_weight if request.specific_role_cols and col in request.specific_role_cols else 1.0 for col in relevant_cols}
+        print(f"Weights created: {weights}")
+        
+        # Create weight vector for relevant columns only
+        weight_vector = np.ones(len(relevant_cols))
+        for i, col in enumerate(relevant_cols):
+            weight_vector[i] = weights.get(col, 0.0)
+        print(f"Weight vector created with shape: {weight_vector.shape}")
+
+        # Scale the data using only relevant columns
+        print("\n=== Scaling Data ===")
+        X_relevant = df_filtered[relevant_cols].fillna(0)
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X_relevant)
+        print("Data scaled successfully")
+
+        # Find similar players to the target player
+        print("\n=== Finding Similar Players ===")
+        target_player_scaled = scaler.transform(target_player[relevant_cols].fillna(0))
+        print(f"Target player scaled data shape: {target_player_scaled.shape}")
+        
+        distances = []
+        # Reset index to ensure we have sequential indices
+        df_filtered = df_filtered.reset_index(drop=True)
+        print(f"Filtered dataframe shape after reset: {df_filtered.shape}")
+        
+        for idx, row in df_filtered.iterrows():
+            if row['Player'] == request.player_name:
+                continue
+            try:
+                player_scaled = X_scaled[idx]
+                distance = weighted_euclidean_distance(player_scaled, target_player_scaled[0], weight_vector)
+                distances.append({
+                    "player": row['Player'],
+                    "position": row['Pos'],
+                    "team": row['Squad'],
+                    "age": int(row['Age']),
+                    "distance": float(distance),
+                    "stats": {stat: float(row[attribute_map[stat]]) for stat in roles[position] if stat in attribute_map and attribute_map[stat] in row}
+                })
+            except IndexError as e:
+                print(f"Warning: Skipping player {row['Player']} due to index error: {str(e)}")
+                continue
+        print(f"Calculated distances for {len(distances)} players")
+
+        # Get top N similar players
+        print("\n=== Getting Top Players ===")
+        top_players = sorted(distances, key=lambda x: x['distance'])[:5]  # Always return top 5
+        print(f"Selected top {len(top_players)} similar players")
+
+        # Get team data for average profile
+        print("\n=== Processing Team Data ===")
+        team_data = df_filtered[df_filtered['Squad'] == request.team]
+        print(f"Found {len(team_data)} players for team {request.team}")
+        
+        if len(team_data) == 0:
+            print(f"Error: No data found for team {request.team}")
+            raise HTTPException(status_code=404, detail=f"No data found for team: {request.team}")
+
+        # Calculate team average profile
+        print("\n=== Calculating Team Average ===")
+        team_data_filtered = team_data[team_data["MP"] > 20][relevant_cols]
+        print(f"Team data shape after filtering: {team_data_filtered.shape}")
+        
+        # Calculate team average
+        team_average = team_data_filtered.mean()
+        print("Team average calculated")
+        print(f"Team average shape: {team_average.shape}")
+
+        # Create weighted team profile
+        print("\n=== Creating Weighted Team Profile ===")
+        weighted_team_profile = team_average.copy()
+        if request.specific_role_cols:
+            for col in request.specific_role_cols:
+                if col in weighted_team_profile:
+                    weighted_team_profile[col] = weighted_team_profile[col] * request.specific_role_weight / 1.5
+                    print(f"Applied weight to {col}: {weighted_team_profile[col]}")
+
+        # Convert team average to full form
+        print("\n=== Converting Team Average to Full Form ===")
+        reverse_attribute_map = {v: k for k, v in attribute_map.items()}
+        full_form_profile = {}
+        for abbrev, value in team_average.items():
+            if abbrev in reverse_attribute_map:
+                if abbrev == "Cmp%":
+                    if position == "Goalkeeping":
+                        full_form_profile["Passes Completed (Launched)"] = float(value)
+                    else:
+                        full_form_profile["Completed Passes Total"] = float(value)
+                else:
+                    full_form_profile[reverse_attribute_map[abbrev]] = float(value)
+            else:
+                full_form_profile[abbrev] = float(value)
+        print("Team average converted to full form")
+
+        # Get target player's stats
+        print("\n=== Getting Target Player Stats ===")
+        target_player_stats = target_player[relevant_cols].iloc[0]
+        print("Target player stats retrieved")
+
+        # Calculate combined average profile
+        print("\n=== Calculating Combined Average Profile ===")
+        average_profile = {}
+        for col in relevant_cols:
+            # Average between target player and weighted team profile
+            avg_value = (target_player_stats[col] + weighted_team_profile[col]) / 2
+            # Convert to full form attribute name
+            if col in reverse_attribute_map:
+                if col == "Cmp%":
+                    if position == "Goalkeeping":
+                        average_profile["Passes Completed (Launched)"] = float(avg_value)
+                    else:
+                        average_profile["Completed Passes Total"] = float(avg_value)
+                else:
+                    average_profile[reverse_attribute_map[col]] = float(avg_value)
+            else:
+                average_profile[col] = float(avg_value)
+        print("Combined average profile calculated")
+
+        # Cluster top players against team average
+        print("\n=== Clustering Against Team Average ===")
+        top_players_data = df_filtered[df_filtered['Player'].isin([p['player'] for p in top_players])]
+        print(f"Top players data shape: {top_players_data.shape}")
+        
+        # Scale team average and top players data
+        team_average_scaled = scaler.transform(team_average.values.reshape(1, -1))
+        top_players_scaled = scaler.transform(top_players_data[relevant_cols].fillna(0))
+        print("Data scaled successfully")
+
+        # Calculate distances to team average
+        print("\n=== Calculating Team Distances ===")
+        team_distances = []
+        for idx, player in enumerate(top_players):
+            player_scaled = top_players_scaled[idx]
+            distance = weighted_euclidean_distance(player_scaled, team_average_scaled[0], weight_vector)
+            team_distances.append({
+                **player,
+                "team_distance": float(distance)
+            })
+        print(f"Calculated team distances for {len(team_distances)} players")
+
+        # Sort by team distance and take top 5
+        final_players = sorted(team_distances, key=lambda x: x['team_distance'])[:5]
+        print("Players sorted by team distance")
+
+        print("\n=== Analysis Complete ===")
+        return {
+            "target_player": request.player_name,
+            "team": request.team,
+            "position": position,
+            "original_position": player_pos,
+            "team_average": full_form_profile,
+            "average_profile": average_profile,
+            "similar_players": final_players
+        }
+
+    except Exception as e:
+        print("\n=== ERROR OCCURRED ===")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        print("Stack trace:")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/players")
+async def get_players():
+    try:
+        print("\n=== Starting Player Search ===")
+        print("Loading all players...")
+
+        # Load both datasets
+        df_outfield = pd.read_csv('Players Merged.csv')
+        df_gk = pd.read_csv('Players GK Merged.csv')
+        
+        # Combine datasets
+        df = pd.concat([df_outfield, df_gk], ignore_index=True)
+        print(f"Total players loaded: {len(df)}")
+
+        # Prepare response
+        players = []
+        for _, row in df.iterrows():
+            player_info = {
+                "name": row['Player'],
+                "position": row['Pos'],
+                "team": row['Squad'],
+                "age": int(row['Age']),
+                "minutes": int(row['Min']),
+                "matches": int(row['MP']),
+                "is_goalkeeper": row['Pos'] in df_position_roles['Goalkeeping']
+            }
+            players.append(player_info)
+
+        # Sort by name
+        players.sort(key=lambda x: x['name'])
+
+        print(f"\n=== Search Complete - Found {len(players)} players ===")
+        return {
+            "total_players": len(players),
+            "players": players
         }
 
     except Exception as e:

@@ -514,21 +514,21 @@ async def analyze_player_to_player(request: PlayerToPlayerRequest):
             print(f"Error: Invalid team {request.team}")
             raise HTTPException(status_code=400, detail=f"Invalid team. Must be one of: {teams}")
 
-        # Load appropriate dataset
+        # Load appropriate dataset based on player position
         print("\n=== Loading Data ===")
-        print("Loading outfield players data...")
-        df_outfield = pd.read_csv('Players Merged.csv')
-        print(f"Outfield players loaded. Shape: {df_outfield.shape}")
-        
-        print("Loading goalkeeper data...")
+        # First check if player is a goalkeeper
         df_gk = pd.read_csv('Players GK Merged.csv')
-        print(f"Goalkeeper data loaded. Shape: {df_gk.shape}")
+        is_goalkeeper = request.player_name in df_gk['Player'].values
         
-        # Combine datasets
-        print("Combining datasets...")
-        df = pd.concat([df_outfield, df_gk], ignore_index=True)
-        print(f"Combined dataset shape: {df.shape}")
-        print(f"Columns in combined dataset: {df.columns.tolist()}")
+        if is_goalkeeper:
+            print("Player is a goalkeeper, using goalkeeper dataset...")
+            df = df_gk
+        else:
+            print("Player is an outfield player, using outfield dataset...")
+            df = pd.read_csv('Players Merged.csv')
+            
+        print(f"Dataset loaded. Shape: {df.shape}")
+        print(f"Columns in dataset: {df.columns.tolist()}")
 
         # Find the target player
         print("\n=== Finding Target Player ===")
@@ -763,27 +763,43 @@ async def analyze_player_to_player(request: PlayerToPlayerRequest):
 async def get_players():
     try:
         print("\n=== Starting Player Search ===")
-        print("Loading all players...")
+        print("Loading players...")
 
-        # Load both datasets
+        # Load both datasets separately
         df_outfield = pd.read_csv('Players Merged.csv')
         df_gk = pd.read_csv('Players GK Merged.csv')
         
-        # Combine datasets
-        df = pd.concat([df_outfield, df_gk], ignore_index=True)
-        print(f"Total players loaded: {len(df)}")
-
-        # Prepare response
+        # Filter out goalkeepers from outfield dataset
+        print("Filtering out goalkeepers from outfield dataset...")
+        df_outfield = df_outfield[~df_outfield['Pos'].isin(df_position_roles['Goalkeeping'])]
+        print(f"Outfield players after filtering: {len(df_outfield)}")
+        
+        # Prepare response with separate handling for goalkeepers and outfield players
         players = []
-        for _, row in df.iterrows():
+        
+        # Add outfield players
+        for _, row in df_outfield.iterrows():
             player_info = {
                 "name": row['Player'],
                 "position": row['Pos'],
                 "team": row['Squad'],
-                "age": int(row['Age']),
-                "minutes": int(row['Min']),
-                "matches": int(row['MP']),
-                "is_goalkeeper": row['Pos'] in df_position_roles['Goalkeeping']
+                "age": int(row['Age']) if pd.notna(row['Age']) else None,
+                "minutes": int(row['Min']) if pd.notna(row['Min']) else None,
+                "matches": int(row['MP']) if pd.notna(row['MP']) else None,
+                "is_goalkeeper": False
+            }
+            players.append(player_info)
+            
+        # Add goalkeepers (only from goalkeeper dataset)
+        for _, row in df_gk.iterrows():
+            player_info = {
+                "name": row['Player'],
+                "position": row['Pos'],
+                "team": row['Squad'],
+                "age": int(row['Age']) if pd.notna(row['Age']) else None,
+                "minutes": int(row['Min']) if pd.notna(row['Min']) else None,
+                "matches": int(row['MP']) if pd.notna(row['MP']) else None,
+                "is_goalkeeper": True
             }
             players.append(player_info)
 

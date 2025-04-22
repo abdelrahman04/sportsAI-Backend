@@ -1,28 +1,55 @@
 # SportsAI - Football Player Analysis API
 
-A FastAPI-based backend service for analyzing football players based on their positions, teams, and specific role attributes.
+A powerful FastAPI-based backend service for comprehensive football player analysis, providing insights based on positions, teams, and specific role attributes.
 
 ## Features
 
-- Player analysis based on position and team
-- Customizable role-specific attributes for analysis
-- Similar player recommendations
-- Support for different player positions including:
+- **Position-Based Analysis**: Analyze players based on their specific positions
+- **Team Context**: Consider team context in player evaluations
+- **Customizable Attributes**: Define and analyze role-specific attributes
+- **Similar Player Recommendations**: Find players with similar characteristics
+- **Comprehensive Position Coverage**:
   - Forward
   - Winger
-  - Attacking Mid
-  - Centre Mid
+  - Attacking Midfielder
+  - Central Midfielder
   - Fullback
-  - Centre Defense
-  - Goalkeeping
+  - Central Defender
+  - Goalkeeper
 
-## API Endpoints
+## Prerequisites
 
-### POST /analyze-players
+- Python 3.8+
+- pip (Python package manager)
 
+## 🛠️ Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/sportsAI-Backend.git
+cd sportsAI-Backend
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Run the server:
+```bash
+python api.py
+```
+
+The server will start on http://localhost:8000
+
+## API Documentation
+
+### Key Endpoints
+
+#### 1. POST /analyze-players
 Analyzes players based on position, team, and specific role attributes.
 
-Request body:
+**Request Body:**
 ```json
 {
     "position": "string",
@@ -31,45 +58,104 @@ Request body:
 }
 ```
 
-## Setup
+#### 2. POST /analyze-player-to-player
+Compares a specific player with others to find similar players based on their attributes.
 
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
+**Request Body:**
+```json
+{
+    "player_name": "string",
+    "team": "string",
+    "specific_role_cols": ["string"],
+    "specific_role_weight": 5.0
+}
 ```
 
-2. Run the server:
-```bash
-python api.py
-```
+## Analysis Methods
 
-The server will start on http://localhost:8000
+### Distance Calculation Methods
 
-## Data
+1. **Weighted Euclidean Distance**
+   - Primary distance metric for player comparison
+   - Weights are position-specific and attribute-specific
+   - Normalized to account for different scales of attributes
 
-The analysis uses two main data sources:
-- Players Merged.csv: Contains data for outfield players
-- Players GK Merged.csv: Contains data for goalkeepers
+2. **Custom Distance Matrix**
+   - Computes pairwise distances between all players
+   - Used for clustering and similarity analysis
+   - Optimized for large datasets
 
-## Data Processing Steps
+### Clustering Models
 
-The data used in this analysis goes through several processing steps:
+1. **DBSCAN (Density-Based Spatial Clustering)**
+   - Identifies clusters based on density
+   - Effective for finding natural player groupings
 
-1. **Data Collection**:
-   - Extracting data from FBref using Excel exports
-   - Web scraping to obtain exact player positions from Transfermarkt
+2. **Gaussian Mixture Model (GMM)**
+   - Probabilistic clustering approach
+   - Handles overlapping player characteristics
 
-2. **Data Cleaning**:
-   - Handling data types and converting to appropriate formats
-   - Processing irregular rows (Rk column)
-   - Standardizing league and team columns
-   - Cleaning players with unknown, missing, or incorrect positions
+3. **Weighted K-Means**
+   - Custom implementation with position-specific weights
+   - Considers attribute importance in clustering
 
-3. **Dataset Integration**:
-   - Combining multiple datasets to create two major player datasets:
-     - Players Merged.csv: For outfield players
-     - Players GK Merged.csv: For goalkeepers
-   - Cleaning team dataset data types
-   - Integrating team datasets to create two major team datasets:
-     - Teams dataset
-     - Teams GK dataset
+4. **Self-Organizing Map (SOM)**
+   - Neural network-based clustering
+   - 5x5 grid for player organization
+
+All models yielded same/similar results
+
+### Distance Calculation and Weighting
+
+1. **Base Distance Calculation**
+   - Uses weighted Euclidean distance
+   - Normalized using StandardScaler
+
+2. **Attribute Weighting System**
+   - Default weights: 1.0 for position-specific, 0.5 for others
+   - Custom weights: k multiplier for user-selected attributes
+   - Position-specific attribute importance
+
+3. **Team Context Integration**
+   - Calculates team average profile (>20 matches played)
+   - Applies team-specific weights
+
+4. **Final Player Selection**
+   - Combines individual and team distances
+   - Ranks players by weighted similarity
+   - Returns top 5 most similar players
+   - Includes detailed performance metrics
+
+
+## Data Sources
+
+The analysis utilizes two primary datasets:
+
+1. **Players Merged.csv**
+   - Comprehensive data for outfield players
+   - Includes performance metrics and statistics
+   - Position-specific attributes
+
+2. **Players GK Merged.csv**
+   - Specialized data for goalkeepers
+   - Goalkeeper-specific metrics and statistics
+
+## Data Processing Pipeline
+
+### 1. Data Collection
+- FBref data extraction via Excel exports
+- Transfermarkt web scraping for precise player positions
+- Integration of multiple data sources
+
+### 2. Data Cleaning
+- Data type standardization
+- Irregular row processing
+- League and team name standardization
+- Web Scraping to get specific player positions
+- Position data validation and correction
+
+### 3. Dataset Integration
+- Creation of unified player datasets
+- Team dataset integration
+- Data type optimization
+- Cross-reference validation

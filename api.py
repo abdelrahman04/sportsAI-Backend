@@ -759,6 +759,10 @@ async def analyze_player_to_player(request: PlayerToPlayerRequest):
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "message": "SportsAI Backend is running"}
+
 @app.get("/players")
 async def get_players():
     try:

@@ -145,6 +145,169 @@ def custom_distance_matrix(X, weights):
             distance_matrix[j, i] = distance
     return distance_matrix
 
+def analyze_dbscan_clusters(df_filtered, dbscan_clusters, numeric_cols, relevant_cols, position):
+    """
+    Analyze DBSCAN clusters to provide explainability insights
+    """
+    print("\n=== Analyzing DBSCAN Clusters ===")
+    
+    # Create a DataFrame with cluster assignments
+    df_with_clusters = df_filtered.copy()
+    df_with_clusters['cluster'] = dbscan_clusters
+    
+    # Get unique clusters (excluding noise cluster -1)
+    unique_clusters = [c for c in np.unique(dbscan_clusters) if c != -1]
+    print(f"Found {len(unique_clusters)} clusters (excluding noise)")
+    
+    cluster_analysis = {
+        "total_clusters": len(unique_clusters),
+        "noise_points": int(np.sum(dbscan_clusters == -1)),
+        "clusters": []
+    }
+    
+    # Analyze each cluster
+    for cluster_id in unique_clusters:
+        cluster_data = df_with_clusters[df_with_clusters['cluster'] == cluster_id]
+        print(f"Analyzing cluster {cluster_id} with {len(cluster_data)} players")
+        
+        # Calculate cluster center (mean of all points in cluster)
+        cluster_center = cluster_data[relevant_cols].mean()
+        
+        # Calculate cluster characteristics
+        cluster_stats = {
+            "cluster_id": int(cluster_id),
+            "size": len(cluster_data),
+            "center": {},
+            "top_attributes": [],
+            "player_examples": cluster_data['Player'].head(3).tolist(),
+            "teams": cluster_data['Squad'].value_counts().head(3).to_dict(),
+            "positions": cluster_data['Pos'].value_counts().to_dict()
+        }
+        
+        # Convert cluster center to full attribute names
+        reverse_attribute_map = {v: k for k, v in attribute_map.items()}
+        for col in relevant_cols:
+            if col in reverse_attribute_map:
+                if col == "Cmp%":
+                    if position == "Goalkeeping":
+                        cluster_stats["center"]["Passes Completed (Launched)"] = float(cluster_center[col])
+                    else:
+                        cluster_stats["center"]["Completed Passes Total"] = float(cluster_center[col])
+                else:
+                    cluster_stats["center"][reverse_attribute_map[col]] = float(cluster_center[col])
+            else:
+                cluster_stats["center"][col] = float(cluster_center[col])
+        
+        # Identify top distinguishing attributes for this cluster
+        # Compare cluster center with overall mean
+        overall_mean = df_filtered[relevant_cols].mean()
+        cluster_deviations = {}
+        
+        for col in relevant_cols:
+            if col in reverse_attribute_map:
+                attr_name = reverse_attribute_map[col]
+                if col == "Cmp%":
+                    if position == "Goalkeeping":
+                        attr_name = "Passes Completed (Launched)"
+                    else:
+                        attr_name = "Completed Passes Total"
+                
+                deviation = cluster_center[col] - overall_mean[col]
+                if abs(deviation) > 0.5:  # Threshold for significant deviation
+                    cluster_deviations[attr_name] = {
+                        "value": float(cluster_center[col]),
+                        "deviation": float(deviation),
+                        "deviation_percent": float((deviation / overall_mean[col]) * 100) if overall_mean[col] != 0 else 0
+                    }
+        
+        # Sort by absolute deviation and take top 5
+        top_attributes = sorted(cluster_deviations.items(), 
+                              key=lambda x: abs(x[1]['deviation']), 
+                              reverse=True)[:5]
+        
+        cluster_stats["top_attributes"] = [
+            {
+                "attribute": attr,
+                "value": stats["value"],
+                "deviation": stats["deviation"],
+                "deviation_percent": stats["deviation_percent"]
+            }
+            for attr, stats in top_attributes
+        ]
+        
+        # Generate cluster description
+        cluster_stats["description"] = generate_cluster_description(
+            cluster_stats, position, cluster_deviations
+        )
+        
+        cluster_analysis["clusters"].append(cluster_stats)
+    
+    # Add overall insights
+    cluster_analysis["insights"] = generate_overall_insights(cluster_analysis, position)
+    
+    return cluster_analysis
+
+def generate_cluster_description(cluster_stats, position, cluster_deviations):
+    """
+    Generate a human-readable description of the cluster
+    """
+    size = cluster_stats["size"]
+    top_attrs = cluster_stats["top_attributes"]
+    
+    if not top_attrs:
+        return f"This cluster contains {size} players with average performance across all metrics."
+    
+    # Find the most distinctive positive and negative attributes
+    positive_attrs = [attr for attr in top_attrs if attr["deviation"] > 0]
+    negative_attrs = [attr for attr in top_attrs if attr["deviation"] < 0]
+    
+    description_parts = [f"This cluster contains {size} players"]
+    
+    if positive_attrs:
+        best_attr = positive_attrs[0]
+        description_parts.append(f"who excel in {best_attr['attribute']} ({best_attr['deviation_percent']:.1f}% above average)")
+    
+    if negative_attrs:
+        worst_attr = negative_attrs[0]
+        description_parts.append(f"but struggle with {worst_attr['attribute']} ({abs(worst_attr['deviation_percent']):.1f}% below average)")
+    
+    # Add position-specific insights
+    if position == "Forward" and any("Goals" in attr["attribute"] for attr in positive_attrs):
+        description_parts.append("These are high-scoring forwards")
+    elif position == "Goalkeeping" and any("Save" in attr["attribute"] for attr in positive_attrs):
+        description_parts.append("These are reliable shot-stoppers")
+    elif position == "Centre Defense" and any("Tackles" in attr["attribute"] for attr in positive_attrs):
+        description_parts.append("These are strong defensive players")
+    
+    return ". ".join(description_parts) + "."
+
+def generate_overall_insights(cluster_analysis, position):
+    """
+    Generate overall insights about the clustering
+    """
+    insights = []
+    
+    total_players = sum(cluster["size"] for cluster in cluster_analysis["clusters"])
+    noise_percentage = (cluster_analysis["noise_points"] / (total_players + cluster_analysis["noise_points"])) * 100
+    
+    insights.append(f"DBSCAN identified {cluster_analysis['total_clusters']} distinct player profiles")
+    insights.append(f"{noise_percentage:.1f}% of players were identified as outliers (noise)")
+    
+    # Find the largest cluster
+    largest_cluster = max(cluster_analysis["clusters"], key=lambda x: x["size"])
+    largest_percentage = (largest_cluster["size"] / total_players) * 100
+    insights.append(f"The largest cluster contains {largest_percentage:.1f}% of players")
+    
+    # Position-specific insights
+    if position == "Forward":
+        insights.append("Clusters likely represent different scoring styles (poachers, creators, etc.)")
+    elif position == "Goalkeeping":
+        insights.append("Clusters likely represent different goalkeeper styles (shot-stoppers, sweepers, etc.)")
+    elif position in ["Centre Defense", "Fullback"]:
+        insights.append("Clusters likely represent different defensive approaches")
+    
+    return insights
+
 class WeightedKMeans:
     def __init__(self, n_clusters=5, max_iter=300, random_state=42):
         self.n_clusters = n_clusters
@@ -349,6 +512,9 @@ async def analyze_players(request: PlayerAnalysisRequest):
         dbscan_clusters = dbscan.fit_predict(distance_matrix)
         print(f"DBSCAN found {len(np.unique(dbscan_clusters))} clusters")
         
+        # Analyze DBSCAN clusters for explainability
+        dbscan_analysis = analyze_dbscan_clusters(df_filtered, dbscan_clusters, numeric_cols, filtered_cols, request.position)
+        
         print("Running GMM...")
         gmm_clusters = gmm.fit_predict(distance_matrix)
         print(f"GMM found {len(np.unique(gmm_clusters))} clusters")
@@ -484,7 +650,8 @@ async def analyze_players(request: PlayerAnalysisRequest):
             "gmm_players": gmm_players,
             "wkmeans_players": wkmeans_players,
             "som_players": som_players,
-            "average_profile": full_form_profile
+            "average_profile": full_form_profile,
+            "dbscan_explainability": dbscan_analysis
         }
 
     except Exception as e:
